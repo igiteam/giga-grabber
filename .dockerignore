@@ -3,10 +3,4 @@ target/
 .github/
 Dockerfile
 .dockerignore
-*.rs.bk
-*.swp
-*~
-\#*\#
-.#*
 *.md
-!README.md
