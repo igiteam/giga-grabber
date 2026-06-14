@@ -1,52 +1,45 @@
 # ============================================================================
-# STAGE 1: BUILDER - Compile static binary using Alpine + MUSL
+# FINAL WORKING DOCKERFILE - Use Ubuntu with musl-tools
 # ============================================================================
-FROM rust:alpine AS builder
+FROM ubuntu:22.04 AS builder
 
 WORKDIR /app
 
-# Install build dependencies including MUSL C compiler
-RUN apk add --no-cache \
-    pkgconfig \
-    openssl-dev \
-    openssl-libs-static \
-    fontconfig-dev \
-    musl-dev \
+# Install system dependencies including MUSL toolchain
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
     musl-tools \
-    gcc \
-    g++ \
-    make \
-    file
+    pkg-config \
+    libssl-dev \
+    libfontconfig1-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Add the MUSL target for static compilation
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Add MUSL target
 RUN rustup target add x86_64-unknown-linux-musl
 
-# Set MUSL as the C compiler
-ENV CC_x86_64_unknown_linux_musl=musl-gcc
-
-# Copy source code
+# Copy source
 COPY . .
 
-# Build STATIC binary for MUSL target
+# Build static binary
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
-# ============================================================================
-# STAGE 2: RUNTIME - Minimal Alpine image
-# ============================================================================
+# Runtime stage
 FROM alpine:latest
 
-# Install runtime dependencies
 RUN apk add --no-cache \
     ca-certificates \
     openssl \
     fontconfig
 
-# Copy the STATIC binary
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/giga_grabber /usr/local/bin/giga-grabber
 
-# Make executable
 RUN chmod +x /usr/local/bin/giga-grabber
 
-# Set entrypoint
 ENTRYPOINT ["giga-grabber"]
 CMD ["--help"]
