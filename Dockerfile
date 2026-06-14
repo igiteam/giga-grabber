@@ -5,18 +5,24 @@ FROM rust:alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies for Alpine
+# Install build dependencies including MUSL C compiler
 RUN apk add --no-cache \
     pkgconfig \
     openssl-dev \
     openssl-libs-static \
     fontconfig-dev \
     musl-dev \
+    musl-tools \
     gcc \
-    make
+    g++ \
+    make \
+    file
 
 # Add the MUSL target for static compilation
 RUN rustup target add x86_64-unknown-linux-musl
+
+# Set MUSL as the C compiler
+ENV CC_x86_64_unknown_linux_musl=musl-gcc
 
 # Copy source code
 COPY . .
