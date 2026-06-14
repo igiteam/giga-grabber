@@ -1,27 +1,53 @@
-FROM rust:latest AS builder
+# ============================================================================
+# STAGE 1: BUILDER - Compile static binary using Alpine + MUSL
+# ============================================================================
+FROM rust:alpine AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    libfontconfig1-dev \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies for Alpine
+# - pkgconfig: for finding libraries
+# - openssl-dev & openssl-libs-static: SSL support (static)
+# - fontconfig-dev: font handling
+# - musl-dev: MUSL libc (static linking)
+# - gcc & make: compilation tools
+RUN apk add --no-cache \
+    pkgconfig \
+    openssl-dev \
+    openssl-libs-static \
+    fontconfig-dev \
+    musl-dev \
+    gcc \
+    make
 
+# Copy source code
 COPY . .
-RUN cargo build --release
 
-# Use SAME debian version for runtime
-FROM debian:bookworm-slim
+# Build STATIC binary for MUSL target
+# This creates a binary with NO external dependencies
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
-RUN apt-get update && apt-get install -y \
+# ============================================================================
+# STAGE 2: RUNTIME - Minimal Alpine image
+# ============================================================================
+FROM alpine:latest
+
+# Install runtime dependencies (minimal set)
+# - ca-certificates: HTTPS/SSL support
+# - openssl: runtime SSL
+# - fontconfig: font rendering
+RUN apk add --no-cache \
     ca-certificates \
-    libssl3 \
-    libfontconfig1 \
-    && rm -rf /var/lib/apt/lists/*
+    openssl \
+    fontconfig
 
-COPY --from=builder /app/target/release/giga_grabber /usr/local/bin/giga-grabber
+# Copy the STATIC binary from builder
+# No glibc = no version conflicts!
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/giga_grabber /usr/local/bin/giga-grabber
 
+# Make executable
+RUN chmod +x /usr/local/bin/giga-grabber
+
+# Set entrypoint
 ENTRYPOINT ["giga-grabber"]
 CMD ["--help"]
